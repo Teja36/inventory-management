@@ -1,0 +1,290 @@
+import { useEffect, useState } from "react";
+
+import {
+  ActionIcon,
+  Box,
+  Button,
+  Group,
+  Menu,
+  Modal,
+  Space,
+  Stack,
+  TextInput,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+
+import { upperFirst, useDebouncedValue, useLocalStorage } from "@mantine/hooks";
+
+import { DataTable } from "mantine-datatable";
+
+import {
+  IconChevronDown,
+  IconPencil,
+  IconPlus,
+  IconSearch,
+  IconTrash,
+} from "@tabler/icons";
+
+import AddItem from "../../components/Home/AddItemModal";
+import EditItem from "../../components/Home/EditItem";
+import openDeleteModal from "../../components/Home/openDeleteModal";
+
+import { getSortedItems } from "../../firebase/fireStore";
+import { useSelector } from "react-redux";
+
+const PAGE_SIZE = 15;
+
+const Home = () => {
+  const userRole = useSelector((state) => state.user.userInfo.role);
+
+  const [query, setQuery] = useState("");
+  const [debouncedQuery] = useDebouncedValue(query, 400);
+  const [items, setItems] = useState([]);
+  const [page, setPage] = useState(1);
+  const [records, setRecords] = useState(items.slice(0, PAGE_SIZE));
+  const [isFetching, setIsFetching] = useState(false);
+  const [sortStatus, setSortStatus] = useState({
+    columnAccessor: "name",
+    direction: "asc",
+  });
+  const [filter, setFilter] = useState("Name");
+  const [opened, setOpened] = useState(false);
+  const [openedEdit, setOpenedEdit] = useState(false);
+  const [editRecord, setEditRecord] = useState({});
+
+  const [, setRecent] = useLocalStorage({
+    key: "recently-searched",
+    defaultValue: [],
+  });
+
+  useEffect(() => {
+    const getRecords = async () => {
+      const res = await getSortedItems(sortStatus, debouncedQuery, filter);
+      setItems(res);
+      if (debouncedQuery !== "") {
+        const ids = res.map((item) => item.uid);
+        setRecent((prev) => [...new Set([...ids, ...prev])].slice(0, 10));
+      }
+    };
+    getRecords();
+  }, [sortStatus, debouncedQuery]);
+
+  // useEffect(() => {
+  //   setIsFetching(true);
+  //   setRecords(items.slice(0, PAGE_SIZE));
+  //   setTimeout(() => setIsFetching(false), 100);
+  // }, [items]);
+
+  useEffect(() => {
+    const from = (page - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE;
+    setRecords(items.slice(from, to));
+  }, [page]);
+
+  const handleFilter = (value) => {
+    setFilter(value);
+  };
+
+  const openEditModal = (record) => {
+    setOpenedEdit(true);
+    setEditRecord(record);
+  };
+
+  const handleCreate = (id, data) => {
+    setOpened(false);
+    setRecords((prev) => [...prev, { uid: id, ...data }]);
+  };
+
+  const handleEdit = (id, data) => {
+    setRecords((prev) =>
+      prev.map((record) => {
+        if (record.uid === id) {
+          return { uid: id, ...data };
+        }
+        return record;
+      })
+    );
+    setEditRecord({});
+  };
+
+  const handleDelete = (id) => {
+    setRecords((prev) => prev.filter((record) => record.uid !== id));
+  };
+
+  return (
+    <>
+      <Stack justify="flex-start" spacing="xs">
+        <Title order={1}>Inventory</Title>
+        <Space h="md" />
+        <Group position="apart">
+          <Button
+            leftIcon={<IconPlus />}
+            onClick={() => setOpened(true)}
+            disabled={
+              userRole === "admin" || userRole === "owner" ? false : true
+            }
+          >
+            Add New
+          </Button>
+          <Group position="right">
+            <TextInput
+              icon={<IconSearch size={18} stroke={1.5} />}
+              placeholder="Search"
+              size="md"
+              radius="md"
+              value={query}
+              onChange={(e) => setQuery(e.currentTarget.value)}
+            />
+            <Menu
+              shadow="md"
+              withArrow
+              width="PopoverWidth"
+              position="bottom-end"
+            >
+              <Menu.Target>
+                <Button
+                  variant="outline"
+                  rightIcon={<IconChevronDown size={20} />}
+                >
+                  Filter by: {filter}
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown onClick={(e) => handleFilter(e.target.innerText)}>
+                <Menu.Item>Name</Menu.Item>
+                <Menu.Item>Potency</Menu.Item>
+                <Menu.Item>Brand</Menu.Item>
+                <Menu.Item>Quantity</Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Group>
+        </Group>
+        <Space h="xs" />
+        <Box sx={{ height: "70vh" }}>
+          <DataTable
+            highlightOnHover
+            withBorder
+            borderRadius="sm"
+            shadow="sm"
+            minHeight={180}
+            columns={[
+              {
+                accessor: "uid",
+                title: "#",
+                textAlignment: "right",
+                width: 40,
+                render: (record) => items.indexOf(record) + 1,
+              },
+              {
+                accessor: "name",
+                width: "50%",
+                sortable: true,
+                render: (record) => {
+                  return record.name
+                    .split(" ")
+                    .map((word) => upperFirst(word))
+                    .join(" ");
+                },
+              },
+              {
+                accessor: "potency",
+                render: (record) => record.potency.toUpperCase(),
+              },
+              { accessor: "size", title: "ml / g" },
+              {
+                accessor: "brand",
+                sortable: true,
+                render: (record) =>
+                  record.brand === "sbl"
+                    ? record.brand.toUpperCase()
+                    : upperFirst(record.brand),
+              },
+              {
+                accessor: "qty",
+                title: "Quantity",
+                sortable: filter === "Quantity" ? false : true,
+                render: (record) => `${record.qty} N`,
+              },
+              {
+                accessor: "actions",
+                title: "Actions",
+                visibleMediaQuery: () => {
+                  if (userRole === "admin" || userRole === "owner") return;
+                  return "width: 0";
+                },
+                render: (record) => (
+                  <Button.Group>
+                    <Tooltip label="Edit">
+                      <ActionIcon
+                        color="dark"
+                        variant="subtle"
+                        onClick={() => openEditModal(record)}
+                      >
+                        <IconPencil size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label="Delete">
+                      <ActionIcon
+                        ml={10}
+                        color="red"
+                        variant="subtle"
+                        onClick={() =>
+                          openDeleteModal(
+                            record.uid,
+                            record.name,
+                            record.potency,
+                            handleDelete
+                          )
+                        }
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Button.Group>
+                ),
+              },
+            ]}
+            records={records}
+            sortStatus={sortStatus}
+            onSortStatusChange={setSortStatus}
+            fetching={isFetching}
+            loaderVariant="oval"
+            noRecordsText="No records found"
+            idAccessor="uid"
+            totalRecords={items.length}
+            recordsPerPage={PAGE_SIZE}
+            page={page}
+            onPageChange={(p) => setPage(p)}
+          />
+        </Box>
+      </Stack>
+
+      {/* Add item modal */}
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title="Add new item"
+      >
+        <AddItem
+          handleSuccess={handleCreate}
+          handleClose={() => setOpened(false)}
+        />
+      </Modal>
+
+      {/* Edit item modall */}
+      <Modal
+        title="Edit item"
+        opened={openedEdit}
+        onClose={() => setOpenedEdit(false)}
+      >
+        <EditItem
+          record={editRecord}
+          handleSuccess={handleEdit}
+          handleClose={() => setOpenedEdit(false)}
+        />
+      </Modal>
+    </>
+  );
+};
+
+export default Home;

@@ -1,0 +1,164 @@
+import { useEffect, useState } from "react";
+import {
+  Navbar,
+  Center,
+  Tooltip,
+  UnstyledButton,
+  createStyles,
+  Stack,
+  Avatar,
+  useMantineColorScheme,
+} from "@mantine/core";
+
+import {
+  IconHome2,
+  IconGauge,
+  IconFingerprint,
+  IconUser,
+  IconSettings,
+  IconLogout,
+  IconSun,
+  IconMoonStars,
+} from "@tabler/icons";
+
+import { useLocation, useNavigate } from "react-router-dom";
+import { logout } from "../../firebase/fireAuth";
+import { useDispatch, useSelector } from "react-redux";
+import { logoutUser } from "../../redux/userSlice";
+
+const useStyles = createStyles((theme) => ({
+  link: {
+    width: 50,
+    height: 50,
+    borderRadius: theme.radius.md,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: theme.white,
+    opacity: 0.85,
+
+    "&:hover": {
+      opacity: 1,
+      backgroundColor: theme.fn.lighten(
+        theme.fn.variant({ variant: "filled", color: theme.primaryColor })
+          .background,
+        0.1
+      ),
+    },
+  },
+
+  active: {
+    opacity: 1,
+    "&, &:hover": {
+      backgroundColor: theme.fn.lighten(
+        theme.fn.variant({ variant: "filled", color: theme.primaryColor })
+          .background,
+        0.15
+      ),
+    },
+  },
+}));
+
+function NavbarLink({ icon: Icon, label, active, onClick }) {
+  const { classes, cx } = useStyles();
+  return (
+    <Tooltip label={label} position="right" transitionDuration={0}>
+      <UnstyledButton
+        onClick={onClick}
+        className={cx(classes.link, { [classes.active]: active })}
+      >
+        <Icon stroke={1.5} />
+      </UnstyledButton>
+    </Tooltip>
+  );
+}
+
+const mockdata = [
+  { icon: IconHome2, label: "Home" },
+  { icon: IconGauge, label: "Dashboard" },
+  { icon: IconUser, label: "Account" },
+  { icon: IconFingerprint, label: "Security" },
+  { icon: IconSettings, label: "Settings" },
+];
+
+const NavbarSimple = () => {
+  const {
+    userData: { photoURL },
+    userInfo: { role },
+  } = useSelector((state) => state.user);
+
+  const dispatch = useDispatch();
+
+  const navigate = useNavigate();
+
+  let location = useLocation();
+
+  const [active, setActive] = useState(0);
+
+  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
+
+  useEffect(() => {
+    let index = mockdata.findIndex(
+      (link) => link.label.toLowerCase() === location.pathname.slice(1)
+    );
+
+    setActive(index === -1 ? 0 : index);
+  }, [location]);
+
+  const links = mockdata.map((link, index) => {
+    if (link.label === "Settings" && role !== "admin" && role !== "owner") {
+      return <></>;
+    }
+
+    return (
+      <NavbarLink
+        {...link}
+        key={link.label}
+        active={index === active}
+        onClick={() => {
+          navigate(`${link.label === "Home" ? "" : link.label.toLowerCase()}`);
+        }}
+      />
+    );
+  });
+
+  const hanldeLogout = () => {
+    logout();
+    dispatch(logoutUser());
+  };
+
+  return (
+    <Navbar
+      height={"100vh"}
+      width={{ base: 80 }}
+      p="md"
+      sx={(theme) => ({
+        backgroundColor: theme.fn.variant({
+          variant: "filled",
+          color: theme.primaryColor,
+        }).background,
+      })}
+    >
+      <Center>
+        <Avatar radius={"xl"} src={photoURL} variant="light" />
+      </Center>
+      <Navbar.Section grow mt={50}>
+        <Stack justify="center" spacing={0}>
+          {links}
+        </Stack>
+      </Navbar.Section>
+      <Navbar.Section>
+        <Stack justify="center" spacing={0}>
+          <NavbarLink
+            icon={colorScheme === "dark" ? IconSun : IconMoonStars}
+            onClick={() => toggleColorScheme()}
+            label={colorScheme === "dark" ? "Light theme" : "Dark theme"}
+          />
+          <NavbarLink icon={IconLogout} label="Logout" onClick={hanldeLogout} />
+        </Stack>
+      </Navbar.Section>
+    </Navbar>
+  );
+};
+
+export default NavbarSimple;
